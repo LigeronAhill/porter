@@ -50,9 +50,6 @@ fn main() -> Result<()> {
                 });
             }
         }
-        // for task in tasks {
-        //     task.await.unwrap();
-        // }
     });
     drop(tx);
     while let Ok((addr, port)) = rx.try_recv() {
