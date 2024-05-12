@@ -10,10 +10,10 @@ use tokio::{
 
 #[derive(Debug, Parser)]
 struct Args {
-    // #[arg()]
-    // addr: IpAddr,
-    #[arg()]
-    cidr: IpCidr,
+    #[arg(conflicts_with("cidr"), required_unless_present("cidr"))]
+    addr: Option<IpAddr>,
+    #[arg(long)]
+    cidr: Option<IpCidr>,
     /// --start-port
     #[arg(long, default_value_t = 1)]
     start_port: u16,
@@ -28,16 +28,26 @@ fn main() -> Result<()> {
     let rt = Runtime::new()?;
     let (tx, mut rx) = channel(10);
     rt.block_on(async {
-        let mut tasks = Vec::new();
-        for addr in args.cidr.iter().map(|n| n.address()) {
+        let (mut from_simgle, mut from_cidr);
+        let addresses: &mut dyn Iterator<Item = IpAddr> = match (args.addr, args.cidr) {
+            (Some(addr), _) => {
+                from_simgle = vec![addr].into_iter();
+                &mut from_simgle
+            }
+            (_, Some(cidr)) => {
+                from_cidr = cidr.iter().map(|n| n.address());
+                &mut from_cidr
+            }
+            (_, _) => unreachable!(),
+        };
+        for addr in addresses {
             for port in args.start_port..=args.end_port {
                 let tx = tx.clone();
-                let task = tokio::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(err) = scan(addr, port, tx).await {
                         eprintln!("error: {err}");
                     }
                 });
-                tasks.push(task);
             }
         }
         // for task in tasks {
