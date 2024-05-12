@@ -12,6 +12,7 @@ use tokio::{
 struct Args {
     #[arg(conflicts_with("cidr"), required_unless_present("cidr"))]
     addr: Option<IpAddr>,
+    /// --cidr
     #[arg(long)]
     cidr: Option<IpCidr>,
     /// --start-port
