@@ -1,16 +1,23 @@
 use anyhow::Result;
+use cidr::IpCidr;
 use clap::Parser;
 use std::net::IpAddr;
-use tokio::runtime::Runtime;
+use tokio::{
+    net::TcpStream,
+    runtime::Runtime,
+    sync::mpsc::{channel, Sender},
+};
 
 #[derive(Debug, Parser)]
 struct Args {
+    // #[arg()]
+    // addr: IpAddr,
     #[arg()]
-    addr: IpAddr,
-    /// --start_port
+    cidr: IpCidr,
+    /// --start-port
     #[arg(long, default_value_t = 1)]
     start_port: u16,
-    /// --end_port
+    /// --end-port
     #[arg(long, default_value_t = 1024)]
     end_port: u16,
 }
@@ -19,7 +26,36 @@ fn main() -> Result<()> {
     assert!(args.start_port > 0 && args.end_port >= args.start_port);
     dbg!(&args);
     let rt = Runtime::new()?;
-    rt.block_on(async {});
-
+    let (tx, mut rx) = channel(10);
+    rt.block_on(async {
+        let mut tasks = Vec::new();
+        for addr in args.cidr.iter().map(|n| n.address()) {
+            for port in args.start_port..=args.end_port {
+                let tx = tx.clone();
+                let task = tokio::spawn(async move {
+                    if let Err(err) = scan(addr, port, tx).await {
+                        eprintln!("error: {err}");
+                    }
+                });
+                tasks.push(task);
+            }
+        }
+        // for task in tasks {
+        //     task.await.unwrap();
+        // }
+    });
+    drop(tx);
+    while let Ok((addr, port)) = rx.try_recv() {
+        dbg!(&addr);
+        dbg!(&port);
+    }
+    Ok(())
+}
+async fn scan(addr: IpAddr, port: u16, results_tx: Sender<(IpAddr, u16)>) -> Result<()> {
+    if let Ok(_open) = TcpStream::connect((addr, port)).await {
+        if let Err(e) = results_tx.send((addr, port)).await {
+            dbg!(e);
+        }
+    }
     Ok(())
 }
